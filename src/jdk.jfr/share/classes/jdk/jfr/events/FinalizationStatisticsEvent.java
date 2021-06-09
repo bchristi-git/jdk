@@ -35,7 +35,7 @@ import jdk.jfr.internal.MirrorEvent;
 @Label("Finalization Statistics")
 @Name("jdk.FinalizationStatistics")
 @MirrorEvent(className = "jdk.internal.event.FinalizationStatistics")
-public final class FinalizerEvent extends AbstractJDKEvent {
+public final class FinalizationStatisticsEvent extends AbstractJDKEvent {
     @Label("Finalized Class")
     public Class<?> finalizedClass;
     

@@ -28,7 +28,7 @@ package jdk.internal.event;
 /**
  * Event details for the running of a finalizer
  */
-public class FinalizerEvent extends Event {
+public class FinalizationStatisticsEvent extends Event {
     // boolean isJDKclass?
     public Class<?> finalizedClass;
     public long numFinalized;
