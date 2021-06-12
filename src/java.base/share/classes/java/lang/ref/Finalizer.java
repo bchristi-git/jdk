@@ -64,6 +64,8 @@ final class Finalizer extends FinalReference<Object> { /* Package-private; must 
     /* Invoked by VM */
     static void register(Object finalizee) {
         new Finalizer(finalizee);
+        // Eventually, track statistics for how many objects of type 
+        // finalizee.class have been registered.  Publish to JDKEvents.java.
     }
 
     private void runFinalizer(JavaLangAccess jla) {

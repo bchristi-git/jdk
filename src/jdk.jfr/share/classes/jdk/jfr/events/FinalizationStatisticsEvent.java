@@ -34,7 +34,7 @@ import jdk.jfr.internal.MirrorEvent;
 @Category({"Java Virtual Machine", "GC", "Finalization"})
 @Label("Finalization Statistics")
 @Name("jdk.FinalizationStatistics")
-@MirrorEvent(className = "jdk.internal.event.FinalizationStatistics")
+@MirrorEvent(className = "jdk.internal.event.FinalizationStatisticsEvent")
 public final class FinalizationStatisticsEvent extends AbstractJDKEvent {
     @Label("Finalized Class")
     public Class<?> finalizedClass;

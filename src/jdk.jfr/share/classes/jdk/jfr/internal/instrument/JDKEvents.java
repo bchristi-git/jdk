@@ -44,6 +44,7 @@ import jdk.jfr.events.ExceptionThrownEvent;
 import jdk.jfr.events.FileForceEvent;
 import jdk.jfr.events.FileReadEvent;
 import jdk.jfr.events.FileWriteEvent;
+import jdk.jfr.events.FinalizationStatisticsEvent;
 import jdk.jfr.events.DeserializationEvent;
 import jdk.jfr.events.ProcessStartEvent;
 import jdk.jfr.events.SecurityPropertyModificationEvent;
@@ -65,6 +66,7 @@ import jdk.internal.platform.Metrics;
 public final class JDKEvents {
     private static final Class<?>[] mirrorEventClasses = {
         DeserializationEvent.class,
+        FinalizationStatisticsEvent.class,
         ProcessStartEvent.class,
         SecurityPropertyModificationEvent.class,
         TLSHandshakeEvent.class,
@@ -84,6 +86,7 @@ public final class JDKEvents {
         ActiveSettingEvent.class,
         ActiveRecordingEvent.class,
         jdk.internal.event.DeserializationEvent.class,
+        jdk.internal.event.FinalizationStatisticsEvent.class,
         jdk.internal.event.ProcessStartEvent.class,
         jdk.internal.event.SecurityPropertyModificationEvent.class,
         jdk.internal.event.TLSHandshakeEvent.class,
@@ -113,6 +116,7 @@ public final class JDKEvents {
     private static final Runnable emitContainerCPUThrottling = JDKEvents::emitContainerCPUThrottling;
     private static final Runnable emitContainerMemoryUsage = JDKEvents::emitContainerMemoryUsage;
     private static final Runnable emitContainerIOUsage = JDKEvents::emitContainerIOUsage;
+    private static final Runnable emitFinalizationStatistics = JDKEvents::emitFinalizationStatistics;
     private static Metrics containerMetrics = null;
     private static boolean initializationTriggered;
 
@@ -129,11 +133,13 @@ public final class JDKEvents {
 
                 RequestEngine.addTrustedJDKHook(ExceptionStatisticsEvent.class, emitExceptionStatistics);
                 RequestEngine.addTrustedJDKHook(DirectBufferStatisticsEvent.class, emitDirectBufferStatistics);
+                RequestEngine.addTrustedJDKHook(FinalizationStatisticsEvent.class, emitFinalizationStatistics);
 
                 initializeContainerEvents();
                 initializationTriggered = true;
             }
         } catch (Exception e) {
+            e.printStackTrace();
             Logger.log(LogTag.JFR_SYSTEM, LogLevel.WARN, "Could not initialize JDK events. " + e.getMessage());
         }
     }
@@ -263,6 +269,7 @@ public final class JDKEvents {
     public static void remove() {
         RequestEngine.removeHook(emitExceptionStatistics);
         RequestEngine.removeHook(emitDirectBufferStatistics);
+        RequestEngine.removeHook(emitFinalizationStatistics);
 
         RequestEngine.removeHook(emitContainerConfiguration);
         RequestEngine.removeHook(emitContainerCPUUsage);
@@ -274,5 +281,14 @@ public final class JDKEvents {
     private static void emitDirectBufferStatistics() {
         DirectBufferStatisticsEvent e = new DirectBufferStatisticsEvent();
         e.commit();
+    }
+
+    private static long dummyVal = 0L;
+    private static void emitFinalizationStatistics() {
+        // Eventually get stats from Finalizer. For now, send dummy event
+        FinalizationStatisticsEvent event = new FinalizationStatisticsEvent();
+        event.finalizedClass = Object.class;
+        event.numFinalized = ++dummyVal;
+        event.commit();
     }
 }

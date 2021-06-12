@@ -45,39 +45,48 @@ import static org.testng.Assert.*;
  */
 
 public class TestFinalizerEvent {
-    static volatile boolean finalizerRun = false;
+    private static final int NUM_TO_FINALIZE = 5;
+    static volatile int numFinalized = 0;
 
     @Test
     public void test() throws InterruptedException, IOException {
         try (Recording recording = new Recording()) {
-            recording.enable(EventNames.Finalizer);
+            recording.enable(EventNames.FinalizationStatistics);
             recording.start();
 
-            FinalizableClass finalizeMe = new FinalizableClass();
-            System.out.println("Created: " + finalizeMe);
-            finalizeMe = null;
-            while (!finalizerRun) {
+            for (int i = 0; i < NUM_TO_FINALIZE; i++) {
+                FinalizableClass finalizeMe = new FinalizableClass();
+                System.out.println("Created: " + finalizeMe);
+                finalizeMe = null;
+            }
+            
+            while (numFinalized != NUM_TO_FINALIZE) {
                 System.gc();
                 Thread.sleep(1000);
             }
             recording.stop();
 
             List<RecordedEvent> events = Events.fromRecording(recording);
-            assertEquals(events.size(), 1);
+            int numRecorded = 0;
             for (RecordedEvent event : events) {
                 System.out.println("Event: " + event);
                 assertTrue(event.hasField("finalizedClass"));
                 RecordedClass clazz = event.getValue("finalizedClass");
-                assertEquals(clazz.getName(), FinalizableClass.class.getName());
+                if (FinalizableClass.class.getName().equals(clazz.getName())) {
+                    numRecorded = event.getValue("numFinalized");
+                }
             }
+            assertEquals(numRecorded, NUM_TO_FINALIZE, "Expected: " + NUM_TO_FINALIZE + ", got: " + numRecorded);
         }
     }
 }
+
+// TODO: do another class, with a different number of objects
 
 class FinalizableClass {
     @Override
     protected void finalize() {
         System.out.println("FinalizeClass.finalize() called");
-        TestFinalizerEvent.finalizerRun = true;
+        TestFinalizerEvent.numFinalized++;
     }
 }
