@@ -27,6 +27,9 @@ package java.lang.ref;
 
 import java.security.PrivilegedAction;
 import java.security.AccessController;
+import java.util.Collections;
+import java.util.Map;
+import java.util.WeakHashMap;
 import jdk.internal.access.JavaLangAccess;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.misc.VM;
@@ -45,6 +48,14 @@ final class Finalizer extends FinalReference<Object> { /* Package-private; must 
 
     private Finalizer next, prev;
 
+    /** Class-># map for FinalizationStatistics JFR event */
+    // ClassValue doesn't provide a way to get the set of keys; use WHM
+    private static WeakHashMap<Class<?>,long[]> statMap;
+
+    /** Lock guarding the statMap */
+    // FIXME: another strategy might be to use AtomicLong in the WHM
+    private static final Object statLock = new Object();
+    
     private Finalizer(Object finalizee) {
         super(finalizee, queue);
         // push onto unfinalized
@@ -64,6 +75,13 @@ final class Finalizer extends FinalReference<Object> { /* Package-private; must 
     /* Invoked by VM */
     static void register(Object finalizee) {
         new Finalizer(finalizee);
+        if (statMap != null) { // Only take lock if tracking stats
+            synchronized(statLock) {
+                if (statMap != null) {
+                    incrStatFor(finalizee.getClass());
+                }
+            }
+        }
     }
 
     private void runFinalizer(JavaLangAccess jla) {
@@ -178,6 +196,42 @@ final class Finalizer extends FinalReference<Object> { /* Package-private; must 
         }
     }
 
+    /* Called from JDKEvents to start collecting f10n stats */
+    static final void initFinalizationStats() {
+        synchronized(statLock) {
+           statMap = new WeakHashMap<>();
+        }
+    }
+    
+    /* Called from JDKEvents to stop collecting f10n stats; also resets stats */
+    // FIXME: threading/locking
+    static final void removeFinalizationStats() {
+        synchronized(statLock) {
+            statMap = null;
+        }
+    }
+    
+    /* Give JFR a ref to the statMap instead of passing an entry set or key set,
+     * to minimize allocations when creating JFR events.
+     * Could minimize further by not using unmodifiable */
+    static Map<Class<?>,long[]> getFinalizationStats() {
+        synchronized(statLock) {
+            return Collections.unmodifiableMap(statMap);
+        }
+    }
+
+    private static void incrStatFor(Class<?> clazz) {
+        synchronized(statLock) {
+            long[] val = statMap.get(clazz);
+            if (val == null) {
+                val = new long[] { 1L };
+                statMap.put(clazz, val);
+            } else {
+                val[0]++;
+            }
+        }
+    }    
+    
     static {
         ThreadGroup tg = Thread.currentThread().getThreadGroup();
         for (ThreadGroup tgn = tg;

@@ -411,6 +411,12 @@
       <setting name="enabled" control="gc-enabled-normal">true</setting>
     </event>
 
+    <event name="jdk.FinalizationStatistics">
+      <setting name="enabled">true</setting>
+      <setting name="stackTrace">false</setting>
+      <setting name="period">everyChunk</setting>
+    </event>
+
     <event name="jdk.PromotionFailed">
       <setting name="enabled" control="gc-enabled-normal">true</setting>
     </event>

@@ -44,6 +44,7 @@ import jdk.jfr.events.ExceptionThrownEvent;
 import jdk.jfr.events.FileForceEvent;
 import jdk.jfr.events.FileReadEvent;
 import jdk.jfr.events.FileWriteEvent;
+import jdk.jfr.events.FinalizationStatisticsEvent;
 import jdk.jfr.events.DeserializationEvent;
 import jdk.jfr.events.ProcessStartEvent;
 import jdk.jfr.events.SecurityPropertyModificationEvent;
@@ -61,6 +62,8 @@ import jdk.jfr.internal.SecuritySupport;
 
 import jdk.internal.platform.Container;
 import jdk.internal.platform.Metrics;
+import jdk.internal.access.JavaLangRefAccess;
+import jdk.internal.access.SharedSecrets;
 
 public final class JDKEvents {
     private static final Class<?>[] mirrorEventClasses = {
@@ -90,7 +93,8 @@ public final class JDKEvents {
         jdk.internal.event.X509CertificateEvent.class,
         jdk.internal.event.X509ValidationEvent.class,
 
-        DirectBufferStatisticsEvent.class
+        DirectBufferStatisticsEvent.class,
+        FinalizationStatisticsEvent.class
     };
 
     // This is a list of the classes with instrumentation code that should be applied.
@@ -113,8 +117,11 @@ public final class JDKEvents {
     private static final Runnable emitContainerCPUThrottling = JDKEvents::emitContainerCPUThrottling;
     private static final Runnable emitContainerMemoryUsage = JDKEvents::emitContainerMemoryUsage;
     private static final Runnable emitContainerIOUsage = JDKEvents::emitContainerIOUsage;
+    private static final Runnable emitFinalizationStatistics = JDKEvents::emitFinalizationStatistics;
     private static Metrics containerMetrics = null;
     private static boolean initializationTriggered;
+
+    private final static JavaLangRefAccess jlra = SharedSecrets.getJavaLangRefAccess(); // set lazily ?
 
     @SuppressWarnings("unchecked")
     public synchronized static void initialize() {
@@ -131,6 +138,7 @@ public final class JDKEvents {
                 RequestEngine.addTrustedJDKHook(DirectBufferStatisticsEvent.class, emitDirectBufferStatistics);
 
                 initializeContainerEvents();
+                initializeFinalizerEvents();
                 initializationTriggered = true;
             }
         } catch (Exception e) {
@@ -171,6 +179,12 @@ public final class JDKEvents {
         RequestEngine.addTrustedJDKHook(ContainerCPUThrottlingEvent.class, emitContainerCPUThrottling);
         RequestEngine.addTrustedJDKHook(ContainerMemoryUsageEvent.class, emitContainerMemoryUsage);
         RequestEngine.addTrustedJDKHook(ContainerIOUsageEvent.class, emitContainerIOUsage);
+    }
+    
+    private static void initializeFinalizerEvents() {
+        // Tell Finalizer to start keeping records
+        jlra.initFinalizationStats();
+        RequestEngine.addTrustedJDKHook(FinalizationStatisticsEvent.class, emitFinalizationStatistics);        
     }
 
     private static void emitExceptionStatistics() {
@@ -269,10 +283,27 @@ public final class JDKEvents {
         RequestEngine.removeHook(emitContainerCPUThrottling);
         RequestEngine.removeHook(emitContainerMemoryUsage);
         RequestEngine.removeHook(emitContainerIOUsage);
+
+        // FIXME: is removeFinalizationStats() even necessary?
+        jlra.removeFinalizationStats();
+        RequestEngine.removeHook(emitFinalizationStatistics);
     }
 
     private static void emitDirectBufferStatistics() {
         DirectBufferStatisticsEvent e = new DirectBufferStatisticsEvent();
         e.commit();
+    }
+
+    private static void emitFinalizationStatistics() {
+        // get stats from Finalizer
+        Map<Class<?>,long[]> statMap = jlra.getFinalizationStats();
+        // send events
+        // FIXME: what's the lowest overhead/alloc way to do this ?
+        statMap.forEach((k,v) -> {
+            FinalizationStatisticsEvent event = new FinalizationStatisticsEvent();
+            event.finalizedClass = k;
+            event.numFinalized = v[0];
+            event.commit();
+        });
     }
 }

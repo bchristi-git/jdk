@@ -201,6 +201,7 @@ public class EventNames {
     public final static String SecurityProperty = PREFIX + "SecurityPropertyModification";
     public final static String DirectBufferStatistics = PREFIX + "DirectBufferStatistics";
     public final static String Deserialization = PREFIX + "Deserialization";
+    public final static String FinalizationStatistics = PREFIX + "FinalizationStatistics";
 
     // Containers
     public static final String ContainerConfiguration = PREFIX + "ContainerConfiguration";

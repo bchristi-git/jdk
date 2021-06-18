@@ -25,6 +25,7 @@
 
 package java.lang.ref;
 
+import java.util.Map;
 import jdk.internal.vm.annotation.ForceInline;
 import jdk.internal.vm.annotation.IntrinsicCandidate;
 import jdk.internal.access.JavaLangRefAccess;
@@ -326,6 +327,22 @@ public abstract class Reference<T> {
             public void runFinalization() {
                 Finalizer.runFinalization();
             }
+            
+            @Override
+            public void initFinalizationStats() {
+                Finalizer.initFinalizationStats();
+            }
+    
+            @Override
+            public void removeFinalizationStats() {
+                Finalizer.removeFinalizationStats();
+            }
+            
+            @Override
+            public Map<Class<?>,long[]> getFinalizationStats() {
+                return Finalizer.getFinalizationStats();
+            }
+
         });
     }
 
