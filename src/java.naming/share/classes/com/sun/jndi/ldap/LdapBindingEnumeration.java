@@ -70,7 +70,7 @@ final class LdapBindingEnumeration
         }
         if (obj == null) {
             // DirContext object
-            obj = new LdapCtx(homeCtx, dn);
+            obj = new LdapCtx(homeCtx(), dn);
         }
 
         CompositeName cn = new CompositeName();
@@ -94,7 +94,7 @@ final class LdapBindingEnumeration
         Binding binding;
         if (respCtls != null) {
            binding = new BindingWithControls(cn.toString(), obj,
-                                homeCtx.convertControls(respCtls));
+                                homeCtx().convertControls(respCtls));
         } else {
             binding = new Binding(cn.toString(), obj);
         }
