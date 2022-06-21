@@ -58,8 +58,13 @@ abstract class AbstractLdapNamingEnumeration<T extends NameClassPair>
 
     /* This class maintains the pieces of state that need to be cleaned up (or
      * are needed for cleanup). It gets registered with Cleaner to perform cleanup.
-     * Because the state is mutable, synchronization is used to ensure that changes
-     * made on the program thread are seen by the cleanup thread.
+     *
+     * reachabilityFences are used to ensure that an AbstractLdapNamingEnumeration
+     * instance does not become unreachable while one of its methods is still
+     * executing (possibly leading to EnumCtx being cleaned up while it's still in use).
+     *
+     * Because the state is mutable, fullFence() is used to ensure that changes
+     * made on the main/program thread are seen by the cleanup thread.
      */
     private static class EnumCtx implements Runnable {
         // *ONLY* update these variables using the setter methods below
