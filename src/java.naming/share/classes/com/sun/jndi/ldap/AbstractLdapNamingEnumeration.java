@@ -57,8 +57,20 @@ abstract class AbstractLdapNamingEnumeration<T extends NameClassPair>
 
     /* This class maintains the pieces of state that need to be cleaned up (or
      * are needed for cleanup). It gets registered with Cleaner to perform cleanup.
-     * Because the state is mutable, synchronization is used to ensure that changes
-     * made on the program thread are seen by the cleanup thread.
+     *
+     * reachabilityFences are used to ensure that an AbstractLdapNamingEnumeration
+     * instance does not become unreachable while one of its methods is still
+     * executing (possibly leading to EnumCtx being cleaned up while still in use).
+     *
+     * Because the state is mutable, the fields are volatile to ensure that changes
+     * made on the main/program thread are visible on the cleanup thread.
+     * Note that this visibility *only* applies to writes to the volatile object
+     * references in EnumCtx, and does *not* ensure visibility of changes to fields
+     * *within* those objects (homeCtx.reqCtls, for instance).
+     *
+     * This level of visibility is sufficient if no "fields within fields" that
+     * are read by the run() method can be written by the program. Confirming this
+     * requires code analysis (now, and possibly during future maintenance).
      */
     private static class EnumCtx implements Runnable {
         private volatile LdapCtx homeCtx;
