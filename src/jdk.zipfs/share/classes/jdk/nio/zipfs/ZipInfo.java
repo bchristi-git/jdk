@@ -49,7 +49,7 @@ public class ZipInfo {
             Map<String, ?> env = Collections.emptyMap();
             ZipFileSystem zfs = (ZipFileSystem)(new ZipFileSystemProvider()
                                     .newFileSystem(Paths.get(args[0]), env));
-            byte[] cen = zfs.cen;
+            byte[] cen = zfs.ctx.cen;
             if (cen == null) {
                 print("zip file is empty%n");
                 return;

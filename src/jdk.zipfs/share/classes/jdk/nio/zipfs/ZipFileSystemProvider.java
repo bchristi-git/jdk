@@ -327,6 +327,9 @@ public class ZipFileSystemProvider extends FileSystemProvider {
             } catch (PrivilegedActionException e) {
                 throw (IOException) e.getException();
             }
+            // We're doomed - need the ZipFileSystem to confirm it is mapped to zfpath
+            // Wait a minute - if if ZFS is in this HashMap, it will never get collected.
+            // Should this be a WeakHashMap ?
             filesystems.remove(zfpath, zfs);
         }
     }
