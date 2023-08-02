@@ -69,6 +69,8 @@ final class ZipPath implements Path {
         if (normalized) {
             this.path = path;
         } else {
+            // Access ZipFileSystem.zc directly, not via the Context, which
+            // may not have been created yet.
             if (zfs.zc.isUTF8()) {
                 this.path = normalize(path);
             } else {    // see normalize(String);
@@ -516,6 +518,8 @@ final class ZipPath implements Path {
     // to avoid incorrectly normalizing byte '0x5c' (as '\')
     // to '/'.
     private byte[] normalize(String path) {
+        // Access ZipFileSystem.zc directly, not via the Context, which
+        // may not have been created yet.
         if (zfs.zc.isUTF8())
             return normalize(zfs.getBytes(path));
         int len = path.length();
@@ -711,7 +715,7 @@ final class ZipPath implements Path {
             return (V)new ZipFileAttributeView(this, false);
         if (type == ZipFileAttributeView.class)
             return (V)new ZipFileAttributeView(this, true);
-        if (zfs.supportPosix) {
+        if (zfs.ctx.supportPosix) {
             if (type == PosixFileAttributeView.class)
                 return (V)new ZipPosixFileAttributeView(this, false);
             if (type == FileOwnerAttributeView.class)
@@ -727,7 +731,7 @@ final class ZipPath implements Path {
             return new ZipFileAttributeView(this, false);
         if ("zip".equals(type))
             return new ZipFileAttributeView(this, true);
-        if (zfs.supportPosix) {
+        if (zfs.ctx.supportPosix) {
             if ("posix".equals(type))
                 return new ZipPosixFileAttributeView(this, false);
             if ("owner".equals(type))
@@ -780,7 +784,7 @@ final class ZipPath implements Path {
         }
 
         // support PosixFileAttributes when activated
-        if (type == PosixFileAttributes.class && zfs.supportPosix) {
+        if (type == PosixFileAttributes.class && zfs.ctx.supportPosix) {
             return (A)readAttributes();
         }
 

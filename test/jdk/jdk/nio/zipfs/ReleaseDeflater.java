@@ -72,15 +72,24 @@ public class ReleaseDeflater {
                 Field max_flaters = fs.getClass().getDeclaredField("MAX_FLATER");
                 max_flaters.setAccessible(true);
                 int MAX_FLATERS = max_flaters.getInt(fs);
-                Field inflaters = fs.getClass().getDeclaredField("inflaters");
+
+                // inflaters and deflaters are within the fs' Cleanup Context
+                Field context = fs.getClass().getDeclaredField("ctx");
+                context.setAccessible(true);
+//                Class contextClass = context.getType();
+//                Object contextObject = context.get(fs);
+
+                Field inflaters = context.getType().getDeclaredField("inflaters");
                 inflaters.setAccessible(true);
-                int inflater_count = ((List<?>) inflaters.get(fs)).size();
+                int inflater_count = ((List<?>) inflaters.get(context.get(fs))).size();
+
                 if (inflater_count > MAX_FLATERS) {
                     throw new Exception("Too many inflaters " + inflater_count);
                 }
-                Field deflaters = fs.getClass().getDeclaredField("deflaters");
+
+                Field deflaters = context.getType().getDeclaredField("deflaters");
                 deflaters.setAccessible(true);
-                int deflater_count = ((List<?>) deflaters.get(fs)).size();
+                int deflater_count = ((List<?>) deflaters.get(context.get(fs))).size();
                 if (deflater_count > MAX_FLATERS) {
                     throw new Exception("Too many deflaters " + deflater_count);
                 }

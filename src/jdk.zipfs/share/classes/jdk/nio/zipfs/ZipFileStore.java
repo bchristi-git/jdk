@@ -69,14 +69,14 @@ final class ZipFileStore extends FileStore {
         return (type == BasicFileAttributeView.class ||
                 type == ZipFileAttributeView.class ||
                 ((type == FileOwnerAttributeView.class ||
-                  type == PosixFileAttributeView.class) && zfs.supportPosix));
+                  type == PosixFileAttributeView.class) && zfs.ctx.supportPosix));
     }
 
     @Override
     public boolean supportsFileAttributeView(String name) {
         Objects.requireNonNull(name);
         return "basic".equals(name) || "zip".equals(name) ||
-               (("owner".equals(name) || "posix".equals(name)) && zfs.supportPosix);
+               (("owner".equals(name) || "posix".equals(name)) && zfs.ctx.supportPosix);
     }
 
     @Override
