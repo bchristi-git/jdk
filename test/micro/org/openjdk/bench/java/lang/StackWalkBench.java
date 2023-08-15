@@ -24,6 +24,7 @@ package org.openjdk.bench.java.lang;
 
 import java.lang.StackWalker.StackFrame;
 import java.util.concurrent.TimeUnit;
+import org.openjdk.jmh.annotations.AuxCounters;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -39,7 +40,7 @@ import org.openjdk.jmh.infra.Blackhole;
 /**
  * Benchmarks for java.lang.StackWalker
  */
-@State(value=Scope.Benchmark)
+@State(value=Scope.Thread)
 @BenchmarkMode(Mode.AverageTime)
 @OutputTimeUnit(TimeUnit.NANOSECONDS)
 @Warmup(iterations = 5, time = 1)
@@ -268,16 +269,26 @@ public class StackWalkBench {
         }
     }
 
+    @State(Scope.Thread)
+    @AuxCounters(AuxCounters.Type.OPERATIONS)
+    public static class NanoDur {
+        public long benchNanoDur;
+    }
+
     /**
      * StackWalker.getCallerClass()
      */
     @Benchmark
-    public void getCallerClass(Blackhole bh) {
+    public void getCallerClass(Blackhole bh, NanoDur nanoDur) {
         final Blackhole localBH = bh;
         final boolean[] done = {false};
         new TestStack(depth, new Runnable() {
             public void run() {
-                localBH.consume(WALKER_CLASS.getCallerClass());
+                long start = System.nanoTime();
+                Class cc = WALKER_CLASS.getCallerClass();
+                long end = System.nanoTime();
+                nanoDur.benchNanoDur = end - start;
+                localBH.consume(cc);
                 done[0] = true;
             }
         }).start();
