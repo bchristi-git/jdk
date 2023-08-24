@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2015, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -32,26 +32,42 @@ import java.util.concurrent.ThreadFactory;
 import java.util.function.Function;
 
 /**
- * {@code Cleaner} manages a set of object references and corresponding cleaning actions.
+ * {@code Cleaner} manages cleanup that can happen after an object becomes
+ * unreachable.
+ * This is needed when some "Owner" object uses a resource that requires
+ * cleanup (by being closed, for instance), but the owner
+ * cannot be used within a {@code try}-with-resources block.
  * <p>
- * Cleaning actions are {@link #register(Object object, Runnable action) registered}
- * to run after the cleaner is notified that the object has become
- * phantom reachable.
- * The cleaner uses {@link PhantomReference} and {@link ReferenceQueue} to be
- * notified when the <a href="package-summary.html#reachability">reachability</a>
- * changes.
+ * An owner object registers itself with an instance of Cleaner, and includes
+ * a corresponding cleanup "Context".
+ * The context object implements Runnable, and contains everything needed for cleanup:
+ * <ul>
+ * <li>references to the resources to be cleaned up</li>
+ * <li>a run() method (or "cleaning action") containing code to perform the cleanup.</li>
+ * </ul>
+ * The cleaning action is eligible to run
+ * after the registered owner object has become
+ * <a href="package-summary.html#reachability-heading">phantom-reachable</a>.
  * <p>
- * Each cleaner operates independently, managing the pending cleaning actions
- * and handling threading and termination when the cleaner is no longer in use.
- * Registering an object reference and corresponding cleaning action returns
- * a {@link Cleanable Cleanable}. The most efficient use is to explicitly invoke
- * the {@link Cleanable#clean clean} method when the object is closed or
- * no longer needed.
- * The cleaning action is a {@link Runnable} to be invoked at most once when
+ * Registering an owner object and its context with Cleaner returns
+ * a {@link Cleanable Cleanable}.
+ * The {@link Cleanable#clean clean} method can be called when the owner object
+ * is no longer needed, to run the cleaning action right away. This avoids
+ * having to wait for the garbage collector to determine that the owner object
+ * has become unreachable. Such "prompt cleanup" is the most reliable and
+ * efficient use of Cleaner, and is recommended whenever possible.
+ * The cleaning action is invoked at most once when
  * the object has become phantom reachable unless it has already been explicitly cleaned.
- * Note that the cleaning action must not refer to the object being registered.
- * If so, the object will not become phantom reachable and the cleaning action
- * will not be invoked automatically.
+ * <p>
+ * The Context must not contain a reference to its Owner object.
+ * It it does, the Cleaner mechanism will keep both strongly-reachable, and the
+ * cleaning action will not be invoked automatically.
+ * <p>
+ * Each cleaner instance operates independently, managing pending cleaning actions
+ * and handling threading and termination when the cleaner is no longer in use.
+ * Cleaner instances are created using the {@link #create()} factory method. It is
+ * recommended that Cleaner instances be shared - for example by all instances
+ * of a class, or all classes in a library.
  * <p>
  * The execution of the cleaning action is performed
  * by a thread associated with the cleaner.
@@ -70,46 +86,54 @@ import java.util.function.Function;
  * {@link java.lang.NullPointerException NullPointerException} to be thrown.
  *
  * @apiNote
- * The cleaning action is invoked only after the associated object becomes
- * phantom reachable, so it is important that the object implementing the
- * cleaning action does not hold references to the object.
- * In this example, a static class encapsulates the cleaning state and action.
- * An "inner" class, anonymous or not,  must not be used because it implicitly
- * contains a reference to the outer instance, preventing it from becoming
- * phantom reachable.
+ * Cleaner invokes the cleaning action only after the associated Owner object becomes
+ * phantom reachable, so it is important that the Context object not hold
+ * a reference to the Owner.
+ * In this example, the Context is implemented as a static inner class.
+ * A non-static inner class, anonymous or not, must not be used because it
+ * implicitly contains a reference to the enclosing Owner instance,
+ * preventing it from becoming phantom reachable.
  * The choice of a new cleaner or sharing an existing cleaner is determined
  * by the use case.
  * <p>
- * If the CleaningExample is used in a try-finally block then the
+ * If the CleaningOwnerExample is used in a try-finally block then the
  * {@code close} method calls the cleaning action.
  * If the {@code close} method is not called, the cleaning action is called
- * by the Cleaner when the CleaningExample instance has become phantom reachable.
+ * by the Cleaner after the CleaningOwnerExample instance becomes phantom reachable.
  * <pre>{@code
- * public class CleaningExample implements AutoCloseable {
+ * public class CleaningOwnerExample implements AutoCloseable {
  *        // A cleaner (preferably one shared within a library,
           // but for the sake of example, a new one is created here)
  *        private static final Cleaner cleaner = Cleaner.create();
  *
- *        // State class captures information necessary for cleanup.
- *        // It must hold no reference to the instance being cleaned
+ *        // Context class captures information necessary for cleanup.
+ *        // It must hold no reference to the Owner instance being cleaned
  *        // and therefore it is a static inner class in this example.
- *        static class State implements Runnable {
+ *        static class Context implements Runnable {
+ *            // Resources requiring cleanup
+ *            SomeResource resource;
  *
- *            State(...) {
- *                // initialize State needed for cleaning action
+ *            Context(...) {
+ *                // initialize context needed for cleaning action
+ *                resource = ...
  *            }
  *
  *            public void run() {
- *                // cleanup action accessing State, executed at most once
+ *                // cleaning action accessing Context, executed at most once
+ *                resource.close();
  *            }
  *        }
  *
- *        private final State state;
- *        private final Cleaner.Cleanable cleanable;
+ *        private final Context context;             // for accessing the resource
+ *        private final Cleaner.Cleanable cleanable; // for calling clean()
  *
  *        public CleaningExample() {
- *            this.state = new State(...);
- *            this.cleanable = cleaner.register(this, state);
+ *            this.context = new Context(...);
+ *            this.cleanable = cleaner.register(this, context);
+ *        }
+ *
+ *        public void doSomething() {
+ *            useResource(context.resource);
  *        }
  *
  *        public void close() {
@@ -117,8 +141,8 @@ import java.util.function.Function;
  *        }
  *    }
  * }</pre>
- * The cleaning action could be a lambda but all too easily will capture
- * the object reference, by referring to fields of the object being cleaned,
+ * The Context could be a lambda but all too easily will capture
+ * the Owner object reference, by referring to fields of the Owner,
  * preventing the object from becoming phantom reachable.
  * Using a static nested class, as above, will avoid accidentally retaining the
  * object reference.
@@ -130,6 +154,28 @@ import java.util.function.Function;
  * and not block. If the cleaning action blocks, it may delay processing
  * other cleaning actions registered to the same cleaner.
  * All cleaning actions registered to a cleaner should be mutually compatible.
+ * <p>
+ * It is possible for the garbage collector to mark an Owner object
+ * phantom-reachable <em>while one of the object's method is still running</em>.
+ * It can happen that the owner becomes unreachable, the cleaning
+ * action runs on the cleaner's thread, and then the still-running method access
+ * an already-closed resource. This scenario is called, "premature cleanup."
+ *
+ * An object's reachability can be maintained using {@link Reference#reachabilityFence(Object)}.
+ * To avoid premature cleanup, it is recommended that code in the Owner's methods
+ * that access a resource (or other state within the Context) be enclosed in
+ * a try-finally block with a {@code reachabilityFence(this)}.
+ *
+ * <pre>{@code
+ * public void doSomething {
+ *     try {
+ *         useResource(context.resource);
+ *     } finally {
+ *         Reference.reachabilityFence(this);
+ *     }
+ * }
+ * }</pre>
+ *
  * @since 9
  */
 public final class Cleaner {
@@ -209,7 +255,7 @@ public final class Cleaner {
     }
 
     /**
-     * Registers an object and a cleaning action to run when the object
+     * Registers an object and a {@link Runnable} to run when the object
      * becomes phantom reachable.
      * Refer to the <a href="#compatible-cleaners">API Note</a> above for
      * cautions about the behavior of cleaning actions.
