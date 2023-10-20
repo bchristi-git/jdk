@@ -87,7 +87,6 @@ public class PrematureCleanupTest {
             // "cleanup" the resource
             nativePointer = 0L;
 
-//            if (FORCE_ALL_PREMATURE) {
             if (forcingPremature()) {
                 // Make sure the 0 is seen back on the program thread
                 VarHandle.fullFence();
