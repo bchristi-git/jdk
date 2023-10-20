@@ -55,7 +55,6 @@ public class PrematureCleanupTest {
     private static final Cleaner SHARED_CLEANER = Cleaner.create();
 
     private static void printHelp() {
-        // FIXME: integrate Enum strings and MAX_FORBID_OWNERS
         System.out.println("""
             Arguments:
             "###"  - Number of Owner objects to create (e.g. "1000", the default for non-FORBID modes)
