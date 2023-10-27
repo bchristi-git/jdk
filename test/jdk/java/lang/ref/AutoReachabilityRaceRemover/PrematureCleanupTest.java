@@ -75,7 +75,8 @@ public class PrematureCleanupTest {
 
     // Context for the Owner
     private static class Context implements Runnable {
-        long nativePointer; // the "resource"
+        // The "resource"; volatile so as to see the cleaned up value on the test thread
+        volatile long nativePointer;
 
         private Context() {
             nativePointer = 0x12345678L;
@@ -85,11 +86,6 @@ public class PrematureCleanupTest {
         public void run() {
             // "cleanup" the resource
             nativePointer = 0L;
-
-            if (forcingPremature()) {
-                // Make sure the 0 is seen back on the program thread
-                VarHandle.fullFence();
-            }
             cleanersRun.getAndIncrement();
         }
     }
