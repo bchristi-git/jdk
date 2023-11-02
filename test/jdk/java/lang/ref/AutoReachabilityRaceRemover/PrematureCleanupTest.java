@@ -1,13 +1,18 @@
-import java.lang.invoke.VarHandle;
 import java.lang.ref.Cleaner;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import static java.util.concurrent.locks.LockSupport.parkNanos;
 
 /**
- * This test creates (and calls a method on) many Owner objects (that *do not*
- * protect against premature cleanup), each on a separate thread. The test
- * detects if/when the objects are cleaned up prematurely.
+ * This test creates many Owner objects (that *do not* protect against premature
+ * cleanup), each on a separate thread.
+ *
+ * In Part One of the test, the test calls a method directly on the Owners
+ * (Owner.doWork()) to access the resource.
+ * In Part Two, Owners are passed as an argument to a method which accesses
+ * the resource directly.
+ *
+ * The test detects Owners that are cleaned up prematurely.
  */
 public class PrematureCleanupTest {
     /* The test will run in one of the following modes */
@@ -21,7 +26,6 @@ public class PrematureCleanupTest {
         TestMode(String desc) {
             this.description = desc;
         }
-        
     }
     
     /* Mode for the test run; configurable via CLI */
@@ -52,6 +56,14 @@ public class PrematureCleanupTest {
     private static final AtomicInteger cleanersRun = new AtomicInteger(0);
     private static final AtomicBoolean alreadyFailed = new AtomicBoolean(false);
  
+    /* Reset test data for another run */
+    private static void reset() {
+        numPremature.set(0);
+        doWorkFinished.set(0);
+        cleanersRun.set(0);
+        alreadyFailed.set(false);
+    }
+
     private static final Cleaner SHARED_CLEANER = Cleaner.create();
 
     private static void printHelp() {
@@ -101,6 +113,7 @@ public class PrematureCleanupTest {
             SHARED_CLEANER.register(this, context);
         }
 
+        /* Test method: allow 'this' to become unreachable; check for premature cleanup */
         public void doWork() {
             // Add 'try' to make FORBID mode pass *without* ARRR
             // try {
@@ -123,18 +136,7 @@ public class PrematureCleanupTest {
                 }
             }
 
-            // Use the resource again
-            if (ctx.nativePointer == 0L) {
-                numPremature.incrementAndGet();
-                
-                if (forbiddingPremature()) {                    
-                    // Only one thread needs to report failure
-                    if (!alreadyFailed.getAndSet(true)) {
-                        throw new RuntimeException("TEST FAILED: Owner was cleaned up prematurely");
-                    }
-                }
-            }
-            
+            checkPrematureCleanup(ctx);
             doWorkFinished.getAndIncrement();
 
             // Add this 'catch' to make FORBID mode pass *without* ARRR
@@ -143,7 +145,54 @@ public class PrematureCleanupTest {
             // }
         }
     }
-   
+
+    /* Test method: allow the given Owner to become unreachable; check for premature cleanup */
+    private static void staticDoWork(Owner o) {
+        // Add 'try' to make FORBID mode pass *without* ARRR
+        // try {
+
+        // Access the context/resource via a local, so Owner can become unreachable
+        Context ctx = o.context;
+
+        // Give 'o' a chance to become unreachable
+        wasteTimeGCandPark();
+
+        if(forcingPremature()) {
+            // Wait for "resource" to be cleaned up
+            while(ctx.nativePointer != 0) {
+                try {
+                    Thread.sleep(1);
+                } catch(InterruptedException ie) {
+                    // If not timed out, print stack trace?
+                    break;
+                }
+            }
+        }
+        checkPrematureCleanup(ctx);
+        doWorkFinished.getAndIncrement();
+
+        // Add this 'catch' to make FORBID mode pass *without* ARRR
+        // } finally {
+        //     java.lang.ref.Reference.reachabilityFence(o);
+        // }
+    }
+
+    /* Check if the resource in the given Context was cleaned up prematurely.
+       Record results and check if the test failed. */
+    private static void checkPrematureCleanup(Context ctx) {
+        // Use the resource again
+        if (ctx.nativePointer == 0L) {
+            numPremature.incrementAndGet();
+
+            if (forbiddingPremature()) {
+                // Only one thread needs to report failure
+                if (!alreadyFailed.getAndSet(true)) {
+                    throw new RuntimeException("TEST FAILED: Owner was cleaned up prematurely");
+                }
+            }
+        }
+    }
+
     /* Create a (non-strongly-held) Owner object and call doWork() on it */
     private static class DoWorkRunnable implements Runnable {
         @Override
@@ -157,9 +206,24 @@ public class PrematureCleanupTest {
         
     }
     
+    /* Create a (non-strongly-held) Owner object and pass it to a method that
+       will access the resource directly */
+    private static class DoWorkRunnableArgument implements Runnable {
+        @Override
+        public void run() {
+            try {
+                staticDoWork(new Owner());
+            } catch (Throwable t) {
+                t.printStackTrace();
+            }
+        }
+    }
+
     public static void main(String[] args) {
         parseArgs(args);
-        runTest();
+        runTest(false);
+        reset();
+        runTest(true);
     }
     
     private static void parseArgs(String[] args) {
@@ -222,9 +286,20 @@ public class PrematureCleanupTest {
         System.out.println("Test will timeout after " + TIMEOUT_MS + "ms");
     }
     
-    public static void runTest() {
+    /**
+     * Run the test
+     *
+     * @param asArg If true, Owners will be passed as an argument to a method,
+     * which will access the resource directly. Otherwise, the resource is
+     * accessed by a direct call to Owner.doWork().
+     */
+    public static void runTest(boolean asArg) {
         System.out.println("===========================");                
-        System.out.println("Test running...");
+        if (asArg) {
+            System.out.println("Part Two: Pass Owner as a method argument");
+        } else {
+            System.out.println("Part One: Create Owner & call doWork() directly");
+        }
         
         long maxTimeStart = System.currentTimeMillis();        
         
@@ -233,12 +308,16 @@ public class PrematureCleanupTest {
         long[] progressStart = { System.currentTimeMillis() };
         int numNulled = 0; // threads that have terminated and been nulled in the array
         for (int i = 0; i < threads.length; i++) {
-            threads[i] = new Thread(new DoWorkRunnable());
+            if (asArg) {
+                threads[i] = new Thread(new DoWorkRunnableArgument());
+            } else {
+                threads[i] = new Thread(new DoWorkRunnable());
+            }
             threads[i].start();            
             progressMessage(progressStart, i + " threads started");
         }
         
-        System.out.println("All threads started; waiting for them to finish");
+        System.out.println("All " + NUM_OWNERS + " threads started; waiting for them to finish");
         
         // Wait for all threads to terminate
         while(numNulled < threads.length) {            
