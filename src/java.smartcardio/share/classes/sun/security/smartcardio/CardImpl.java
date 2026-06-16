@@ -118,14 +118,15 @@ final class CardImpl extends Card {
         }
         long localCardId = SCardConnect(terminal.contextId, terminal.name,
                     sharingMode, connectProtocol);
+
+        this.context = new Context(localCardId, State.OK);
+        this.cleanable = CleanerFactory.cleaner().register(this, this.context);
+
         byte[] status = new byte[2];
         byte[] atrBytes = SCardStatus(localCardId, status);
         atr = new ATR(atrBytes);
         this.protocol = status[1] & 0xff;
         basicChannel = new ChannelImpl(this, 0);
-
-        this.context = new Context(localCardId, State.OK);
-        this.cleanable = CleanerFactory.cleaner().register(this, this.context);
     }
 
     void checkState()  {
