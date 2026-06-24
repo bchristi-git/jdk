@@ -42,6 +42,7 @@
 import java.util.WeakHashMap;
 import javax.smartcardio.Card;
 import javax.smartcardio.CardTerminal;
+import java.security.NoSuchAlgorithmException;
 
 import jdk.test.whitebox.WhiteBox;
 
@@ -53,7 +54,19 @@ public class TestCleaner extends Utils {
     static WhiteBox wb;
 
     public static void main(String[] args) throws Exception {
-        CardTerminal terminal = getTerminal(args);
+        CardTerminal terminal = null;
+        try {
+            terminal = getTerminal(args);
+        } catch (NoSuchAlgorithmException e) {
+            if ("Error constructing TerminalFactory for PC/SC using SunPCSC".equals(e.getMessage())) {
+                // Cause is expected to be a PCSCException
+                if ("SCARD_E_NO_SERVICE".equals(e.getCause().getMessage())) {
+                    System.out.println("Skipping the test: " +
+                            "Unable to construct TerminalFactory");
+                }
+
+            }
+        }
         if (terminal == null) {
             System.out.println("Skipping the test: " +
                     "no card terminals available");
