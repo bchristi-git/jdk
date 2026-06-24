@@ -63,8 +63,10 @@ public class TestCleaner extends Utils {
                 if ("SCARD_E_NO_SERVICE".equals(e.getCause().getMessage())) {
                     System.out.println("Skipping the test: " +
                             "Unable to construct TerminalFactory");
+                    return;
+                } else {
+                    throw e;
                 }
-
             }
         }
         if (terminal == null) {
