@@ -45,6 +45,7 @@ import javax.smartcardio.CardTerminal;
 import java.security.NoSuchAlgorithmException;
 
 import jdk.test.whitebox.WhiteBox;
+import jtreg.SkippedException;
 
 /**
  * Rudimentary test to confirm that the cleaning action does not prevent the
@@ -61,18 +62,16 @@ public class TestCleaner extends Utils {
             if ("Error constructing TerminalFactory for PC/SC using SunPCSC".equals(e.getMessage())) {
                 // Cause is expected to be a PCSCException
                 if ("SCARD_E_NO_SERVICE".equals(e.getCause().getMessage())) {
-                    System.out.println("Skipping the test: " +
+                    throw new SkippedException("Skipping the test: " +
                             "Unable to construct TerminalFactory");
-                    return;
                 } else {
                     throw e;
                 }
             }
         }
         if (terminal == null) {
-            System.out.println("Skipping the test: " +
+            throw new SkippedException("Skipping the test: " +
                     "no card terminals available");
-            return;
         }
 
         while (!terminal.isCardPresent()) {
@@ -83,9 +82,8 @@ public class TestCleaner extends Utils {
         // Connect using any available protocol
         Card card = terminal.connect("*");
         if (card == null) {
-            System.out.println("Skipping the test: " +
+            throw new SkippedException("Skipping the test: " +
                     "no card available");
-            return;
         }
         System.out.println("card is " + card);
 
